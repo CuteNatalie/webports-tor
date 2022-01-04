@@ -17,32 +17,32 @@ diff --git a/src/common/compat.c b/src/common/compat.c
 diff --git a/src/common/util.c b/src/common/util.c
 --- a/src/common/util.c
 +++ b/src/common/util.c
-@@ -2197,14 +2197,22 @@ check_private_dir(const char *dirname, cpd_check_t check,
-
-     pw = tor_getpwuid(st.st_uid);
-
+@@ -2400,15 +2400,24 @@
+         tor_strdup("<unknown>");
+     }
+ 
 -    log_warn(LD_FS, "%s is not owned by this user (%s, %d) but by "
--        "%s (%d). Perhaps you are running Tor as the wrong user?",
--                         dirname, process_ownername, (int)running_uid,
--                         pw ? pw->pw_name : "<unknown>", (int)st.st_uid);
-+    //codebuff_patch_05
-+    // nacl does not set/persist/report file/dir owner uid and guid properly
-+    // on chrome every extension/app is in seperate "sandbox",
-+    // thus (arguably) avoiding these security checks is not a risk
++     //codebuff_patch_05
++     // nacl does not set/persist/report file/dir owner uid and guid properly
++     // on chrome every extension/app is in seperate "sandbox",
++     // thus (arguably) avoiding these security checks is not a risk
 +    #ifndef __native_client__
 +      tor_free(process_ownername);
++      tor_free(file_ownername);
 +      close(fd);
 +      log_warn(LD_FS, "%s is not owned by this user (%s, %d) but by "
-+          "%s (%d). Perhaps you are running Tor as the wrong user?",
-+                           dirname, process_ownername, (int)running_uid,
-+                           pw ? pw->pw_name : "<unknown>", (int)st.st_uid);
-
+         "%s (%d). Perhaps you are running Tor as the wrong user?",
+              dirname, process_ownername, (int)running_uid,
+              file_ownername, (int)st.st_uid);
+ 
 -    tor_free(process_ownername);
+-    tor_free(file_ownername);
 -    close(fd);
 -    return -1;
-+      tor_free(process_ownername);
-+      close(fd);
-+      return -1;
++     tor_free(process_ownername);
++     tor_free(file_ownername);
++     close(fd);
++     return -1;
 +    #endif
    }
    if ( (check & (CPD_GROUP_OK|CPD_GROUP_READ))

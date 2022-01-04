@@ -59,6 +59,6 @@ keeps track of all those.**
 
  - Socket api is only allowed in chrome apps, remember to load 
    published directory as chrome app instead of make run / make serve
- - The default port is 9999 instead of usual 9150, 
+ - The default port is 9999 instead of usual 9050, 
    thus point your (socks)proxy to 127.0.0.1:9999
  - The chrome app is titled Kronymous and is available on webstore
