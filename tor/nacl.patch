@@ -1,23 +1,52 @@
-diff --git a/src/common/compat.c b/src/common/compat.c
---- a/src/common/compat.c
-+++ b/src/common/compat.c
-@@ -1684,7 +1684,11 @@ set_max_file_descriptors(rlim_t limit, int *max_out)
-              "ConnLimit must be at least %d. Failing.", ULIMIT_BUFFER);
-     return -1;
+From a1017ecba51420541e9028e0c7fbe5adafafb2fb Mon Sep 17 00:00:00 2001
+From: Gymxo
+Date: Wed, 5 Jan 2022 12:22:43 -0500
+Subject: [PATCH] hmm
+
+---
+ src/app/config/config.c    |  4 ++++
+ src/lib/fs/dir.c           | 29 ++++++++++++++++++++++++-----
+ src/lib/fs/path.c          |  2 ++
+ src/lib/process/restrict.c |  7 +++++++
+ src/lib/process/setuid.c   |  1 +
+ src/app/main/main.c        | 7 +++++++
+ 6 files changed, 45 insertions(+), 5 deletions(-)
+
+diff --git a/src/app/config/config.c b/src/app/config/config.c
+index 2877bc1..bb568a7 100644
+--- a/src/app/config/config.c
++++ b/src/app/config/config.c
+@@ -2075,10 +2075,14 @@ options_act,(const or_options_t *old_options))
+   /* Write control ports to disk as appropriate */
+   control_ports_write_to_file();
+ 
++  // codebuff_patch_03
++  // nacl_io does not support file locking (yet)
++  #ifndef __native_client__
+   if (running_tor && !have_lockfile()) {
+     if (try_locking(options, 1) < 0)
+       return -1;
    }
--
-+  // codebuff_patch_04
-+  // getrlimit not implemented on nacl
-+  #ifdef __native_client__
-+    #undef HAVE_GETRLIMIT
 +  #endif
-   /* Define some maximum connections values for systems where we cannot
-    * automatically determine a limit. Re Cygwin, see
-    * http://archives.seul.org/or/talk/Aug-2006/msg00210.html
-diff --git a/src/common/util.c b/src/common/util.c
---- a/src/common/util.c
-+++ b/src/common/util.c
-@@ -2400,15 +2400,24 @@
+ 
+   {
+     int warning_severity = options->ProtocolWarnings ? LOG_WARN : LOG_INFO;
+diff --git a/src/lib/fs/dir.c b/src/lib/fs/dir.c
+index 2626635..32d3bcd 100644
+--- a/src/lib/fs/dir.c
++++ b/src/lib/fs/dir.c
+@@ -36,6 +36,10 @@
+ #include <fcntl.h>
+ #endif
+ 
++#ifndef O_NOFOLLOW
++#define O_NOFOLLOW 0
++#endif
++
+ #ifdef _WIN32
+ #include <io.h>
+ #include <direct.h>
+@@ -199,7 +203,15 @@ check_private_dir,(const char *dirname, cpd_check_t check,
          tor_strdup("<unknown>");
      }
  
@@ -34,41 +63,32 @@ diff --git a/src/common/util.c b/src/common/util.c
          "%s (%d). Perhaps you are running Tor as the wrong user?",
               dirname, process_ownername, (int)running_uid,
               file_ownername, (int)st.st_uid);
- 
--    tor_free(process_ownername);
--    tor_free(file_ownername);
--    close(fd);
--    return -1;
-+     tor_free(process_ownername);
-+     tor_free(file_ownername);
-+     close(fd);
-+     return -1;
+@@ -208,6 +220,7 @@ check_private_dir,(const char *dirname, cpd_check_t check,
+     tor_free(file_ownername);
+     close(fd);
+     return -1;
 +    #endif
    }
    if ( (check & (CPD_GROUP_OK|CPD_GROUP_READ))
         && (st.st_gid != running_gid) && (st.st_gid != 0)) {
-@@ -2214,14 +2222,20 @@ check_private_dir(const char *dirname, cpd_check_t check,
+@@ -217,14 +230,20 @@ check_private_dir,(const char *dirname, cpd_check_t check,
      process_groupname = gr ? tor_strdup(gr->gr_name) : tor_strdup("<unknown>");
      gr = getgrgid(st.st_gid);
-
+ 
 -    log_warn(LD_FS, "%s is not owned by this group (%s, %d) but by group "
--             "%s (%d).  Are you running Tor as the wrong user?",
--             dirname, process_groupname, (int)running_gid,
--             gr ?  gr->gr_name : "<unknown>", (int)st.st_gid);
--
++      // codebuff_patch_06
++      // nacl does not set/persist/report file/dir owner uid and guid properly
++      // on chrome every extension/app is in seperate "sandbox",
++      // thus (arguably) avoiding these security checks is not a risk
++      #ifndef __native_client__
++      log_warn(LD_FS, "%s is not owned by this group (%s, %d) but by group "
+              "%s (%d).  Are you running Tor as the wrong user?",
+              dirname, process_groupname, (int)running_gid,
+              gr ?  gr->gr_name : "<unknown>", (int)st.st_gid);
+ 
 -    tor_free(process_groupname);
 -    close(fd);
 -    return -1;
-+    // codebuff_patch_06
-+    // nacl does not set/persist/report file/dir owner uid and guid properly
-+    // on chrome every extension/app is in seperate "sandbox",
-+    // thus (arguably) avoiding these security checks is not a risk
-+    #ifndef __native_client__
-+      log_warn(LD_FS, "%s is not owned by this group (%s, %d) but by group "
-+               "%s (%d).  Are you running Tor as the wrong user?",
-+               dirname, process_groupname, (int)running_gid,
-+               gr ?  gr->gr_name : "<unknown>", (int)st.st_gid);
-+
 +      tor_free(process_groupname);
 +      close(fd);
 +      return -1;
@@ -76,48 +96,87 @@ diff --git a/src/common/util.c b/src/common/util.c
    }
    unsigned unwanted_bits = 0;
    if (check & (CPD_GROUP_OK|CPD_GROUP_READ)) {
-diff --git a/src/or/config.c b/src/or/config.c
---- a/src/or/config.c
-+++ b/src/or/config.c
-@@ -1481,10 +1481,14 @@ options_act(const or_options_t *old_options)
-   /* Write control ports to disk as appropriate */
-   control_ports_write_to_file();
-
-+  // codebuff_patch_03
-+  // nacl_io does not support file locking (yet)
-+  #ifndef __native_client__
-   if (running_tor && !have_lockfile()) {
-     if (try_locking(options, 1) < 0)
-       return -1;
+diff --git a/src/lib/fs/path.c b/src/lib/fs/path.c
+index 8194d92..4f143da 100644
+--- a/src/lib/fs/path.c
++++ b/src/lib/fs/path.c
+@@ -622,12 +622,14 @@ tor_glob(const char *pattern)
+   // use custom error handler to workaround BSD quirks and do not set GLOB_ERR
+   // because it would make glob fail on error even if the error handler ignores
+   // the error
++#ifdef GLOB_NOMATCH
+   int ret = glob(pattern, flags, glob_errfunc, &matches);
+   if (ret == GLOB_NOMATCH) {
+     return smartlist_new();
+   } else if (ret != 0) {
+     return NULL;
    }
-+  #endif
-
-   if (consider_adding_dir_servers(options, old_options) < 0)
-     return -1;
-diff --git a/src/or/main.c b/src/or/main.c
---- a/src/or/main.c
-+++ b/src/or/main.c
-@@ -2875,6 +2875,11 @@ static struct {
++#endif
+ 
+   // #40141, !249: workaround for glibc bug where patterns ending in path
+   // separator match files and folders instead of folders only.
+diff --git a/src/lib/process/restrict.c b/src/lib/process/restrict.c
+index 61ea664..b9856ca 100644
+--- a/src/lib/process/restrict.c
++++ b/src/lib/process/restrict.c
+@@ -15,6 +15,10 @@
+ #include "lib/log/util_bug.h"
+ #include "lib/net/socket.h"
+ 
++#ifdef HAVE_SYS_SYSLIMITS_H
++#include <sys/syslimits.h>
++#endif
++
+ #ifdef HAVE_SYS_MMAN_H
+ #include <sys/mman.h>
+ #endif
+@@ -193,6 +197,9 @@ set_max_file_descriptors(rlim_t limit, int *max_out)
+    * https://archives.seul.org/or/talk/Aug-2006/msg00210.html
+    * For an iPhone, 9999 should work. For Windows and all other unknown
+    * systems we use 15000 as the default. */
++#ifdef __native_client__
++  #undef HAVE_GETRLIMIT
++#endif
+ #ifndef HAVE_GETRLIMIT
+ #if defined(CYGWIN) || defined(__CYGWIN__)
+   const char *platform = "Cygwin";
+diff --git a/src/lib/process/setuid.c b/src/lib/process/setuid.c
+index e802027..9b81905 100644
+--- a/src/lib/process/setuid.c
++++ b/src/lib/process/setuid.c
+@@ -39,6 +39,7 @@
+ #ifdef HAVE_SYS_PRCTL_H
+ #include <sys/prctl.h>
+ #endif
++#include <sys/syslimits.h>
+ 
+ #include <errno.h>
+ #include <string.h>
+diff --git a/src/app/main/main.c b/src/app/main/main.c
+index 8956449..f2a3ba6 100644
+--- a/src/app/main/main.c
++++ b/src/app/main/main.c
+@@ -482,6 +482,10 @@ static struct {
  void
- handle_signals(int is_parent)
+ handle_signals(void)
  {
-+  // codebuff_patch_01
-+  // nacl doesn't support signals(no support in libevent)
++
 +  #ifdef __native_client__
 +    return;
 +  #endif
    int i;
-   if (is_parent) {
-     for (i = 0; signal_handlers[i].signal_value >= 0; ++i) {
-@@ -2918,6 +2923,11 @@ handle_signals(int is_parent)
+   const int enabled = !get_options()->DisableSignalHandlers;
+ 
+@@ -521,6 +525,9 @@ handle_signals(void)
  void
  activate_signal(int signal_num)
  {
-+  // codebuff_patch_02
-+  // nacl doesn't support signals(no support in libevent)
 +  #ifdef __native_client__
-+	return;
++    return;
 +  #endif
    int i;
    for (i = 0; signal_handlers[i].signal_value >= 0; ++i) {
      if (signal_handlers[i].signal_value == signal_num) {
+-- 
+2.30.2
+
