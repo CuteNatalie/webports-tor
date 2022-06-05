@@ -1,7 +1,7 @@
 NAME=tor
-VERSION=0.4.6.9
-URL=https://archive.torproject.org/tor-package-archive/tor-0.4.6.9.tar.gz
+VERSION=0.4.7.7
+URL=https://archive.torproject.org/tor-package-archive/tor-0.4.7.7.tar.gz
 LICENSE=CUSTOM
-SHA1=9062fe7ab030891f48ec9fc9762ca739e70ed050
+SHA1=86d27f2d039cd014fd6440047ab47679db5ac695
 DEPENDS=(nacl-spawn openssl zlib libevent)
 DISABLED_TOOLCHAIN=(emscripten glibc)
